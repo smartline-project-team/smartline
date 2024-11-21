@@ -1,0 +1,47 @@
+# Django-related
+*.log
+*.pot
+*.pyc
+*.pyo
+*.sqlite3
+__pycache__/
+
+# If you use migrations
+db.sqlite3
+migrations/
+
+# Media and static files
+/staticfiles/
+/media/
+
+# Environment variables and virtual environments
+.env
+*.env
+venv/
+.venv/
+
+# IDE/editor-specific
+.idea/
+.vscode/
+*.swp
+*~
+
+# System-specific
+.DS_Store
+Thumbs.db
+
+# Pytest-related
+.pytest_cache/
+.tox/
+.coverage
+.cache/
+
+# MyPy-related
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Build-related
+build/
+dist/
+*.egg-info/
