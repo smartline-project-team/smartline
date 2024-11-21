@@ -20,7 +20,8 @@ from django.urls import path, include
 from .settings.swagger import docpatterns
 
 apipatterns = [
-    path('api/', include('apps.users.urls')),
+    path('api/users/', include('apps.users.urls')),
+    path('api/auth/', include('apps.authorization.urls')),
 ]
 
 urlpatterns = [
