@@ -5,6 +5,7 @@ from django.conf import settings
 from django.contrib.sites.shortcuts import get_current_site
 from django.urls import reverse
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import EmailConfirmation
 
@@ -29,6 +30,7 @@ class RegistrationSerializer(serializers.ModelSerializer):
 
         user = User.objects.create(
             email=email,
+            is_staff = False,
             is_active=False  
         )
         user.set_password(password)
@@ -50,6 +52,41 @@ class RegistrationSerializer(serializers.ModelSerializer):
 
         return user
     
+class ResendEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        try:
+            user = User.objects.get(email=value)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("This email address is not registered.")
+        return value
+
+    def resend_email(self):
+        email = self.validated_data['email']
+        user = User.objects.get(email=email)
+        
+        confirmation = EmailConfirmation.objects.filter(user=user).first()
+
+        if confirmation:
+            confirmation.delete()
+        
+        request = self.context.get('request')
+        current_site = get_current_site(request)
+        confirmation_url = f"http://{current_site.domain}{reverse('confirm-email', args=[confirmation.token])}"
+        
+        send_mail(
+            'Подтверждение регистрации',
+            f'Привет! Подтверди свою почту по ссылке: {confirmation_url}',
+            settings.EMAIL_HOST_USER,
+            [email],
+            fail_silently=False,  # при ошибке выведет в консоль причину
+        )
+
+    def save(self):
+        self.resend_email()
+ 
+    
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
@@ -64,9 +101,12 @@ class LoginSerializer(serializers.Serializer):
         if not user.is_active:
             raise AuthenticationFailed('Пользователь не активен. Подтвердите email.')
 
+        refresh = RefreshToken.for_user(user)
+
         return {
             'email': user.email,
             'first_name': user.first_name,
             'last_name': user.last_name,
-            'token': user.auth_token.key
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
         }
