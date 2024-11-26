@@ -5,11 +5,11 @@ from drf_yasg import openapi
 
 schema_view = get_schema_view(
     openapi.Info(
-        title="АПИ ПИПИ",
+        title="Иван грозный",
         default_version='v1',
         description="Кароче мега прожект, нужно закончить по-быстренькому",
         terms_of_service="https://www.google.com/policies/terms/",
-        contact=openapi.Contact(email="your_email@example.com"),
+        contact=openapi.Contact(email="zr12169@auca,kg"),
         license=openapi.License(name="BSD License"),
     ),
     public=True,
