@@ -24,6 +24,7 @@ from .settings.swagger import docpatterns
 apipatterns = [
     path('api/users/', include('apps.users.urls')),
     path('api/auth/', include('apps.authorization.urls')),
+    path('api/businesses/', include('apps.business.urls')),
 ]
 
 urlpatterns = [
