@@ -5,8 +5,9 @@ class CustomManager(BaseUserManager):
         if not email:
             raise ValueError(_('У пользователя должен быть email'))
         email = self.normalize_email(email)
-        extra_fields.setdefault('is_active', False)  
+        extra_fields.setdefault('is_staff', False)  
         user = self.model(email=email, **extra_fields)
+        user.is_active = True
         user.set_password(password)
         user.save()
         return user

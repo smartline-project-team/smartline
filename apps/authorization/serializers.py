@@ -1,112 +1,77 @@
 from rest_framework import serializers
-from django.contrib.auth import get_user_model, authenticate
+from django.contrib.auth import get_user_model
+from .models import VerificationCode
 from django.core.mail import send_mail
-from django.conf import settings
-from django.contrib.sites.shortcuts import get_current_site
-from django.urls import reverse
-from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
-
-from .models import EmailConfirmation
 
 User = get_user_model()
 
-class RegistrationSerializer(serializers.ModelSerializer):
-    password1 = serializers.CharField(write_only=True)
-    password2 = serializers.CharField(write_only=True)
+class SendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=False)
+    phone = serializers.CharField(required=False)
 
-    class Meta:
-        model = User
-        fields = ['email', 'password1', 'password2']
-
-    def validate(self, data):
-        if data['password1'] != data['password2']:
-            raise serializers.ValidationError("Пароли не совпадают.")
-        return data
-
-    def create(self, validated_data):
-        email = validated_data['email']
-        password = validated_data['password1']
-
-        user = User.objects.create(
-            email=email,
-            is_staff = False,
-            is_active=False  
-        )
-        user.set_password(password)
-        user.save()
-
-        confirmation = EmailConfirmation.objects.create(user=user)
-
-        request = self.context.get('request')
-        current_site = get_current_site(request)
-        confirmation_url = f"http://{current_site.domain}{reverse('confirm-email', args=[confirmation.token])}"
-
-        send_mail(
-            'Подтверждение регистрации',
-            f'Привет! Подтверди свою почту по ссылке: {confirmation_url}',
-            settings.EMAIL_HOST_USER,
-            [email],
-            fail_silently=False, #при ошибке выведет в консоль причину
-        )
-
-        return user
-    
-class ResendEmailSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-
-    def validate_email(self, value):
-        try:
-            user = User.objects.get(email=value)
-        except User.DoesNotExist:
-            raise serializers.ValidationError("This email address is not registered.")
-        return value
-
-    def resend_email(self):
-        email = self.validated_data['email']
-        user = User.objects.get(email=email)
-        
-        confirmation = EmailConfirmation.objects.filter(user=user).first()
-
-        if confirmation:
-            confirmation.delete()
-        
-        request = self.context.get('request')
-        current_site = get_current_site(request)
-        confirmation_url = f"http://{current_site.domain}{reverse('confirm-email', args=[confirmation.token])}"
-        
-        send_mail(
-            'Подтверждение регистрации',
-            f'Привет! Подтверди свою почту по ссылке: {confirmation_url}',
-            settings.EMAIL_HOST_USER,
-            [email],
-            fail_silently=False,  # при ошибке выведет в консоль причину
-        )
+    def validate(self, attrs):
+        email = attrs.get('email')
+        phone = attrs.get('phone')
+        if not email and not phone:
+            raise serializers.ValidationError("Необходимо указать email или телефон.")
+        return attrs
 
     def save(self):
-        self.resend_email()
- 
-    
-class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    password = serializers.CharField(write_only=True)
+        email = self.validated_data.get('email')
+        phone = self.validated_data.get('phone')
+        user, _ = User.objects.get_or_create(email=email)
+        verification, _ = VerificationCode.objects.get_or_create(user=user)
+        verification.generate_code()
 
-    def validate(self, data):
-        email = data.get('email')
-        password = data.get('password')
+        if email:
+            send_mail(
+                subject="Ваш код подтверждения",
+                message=f"Ваш код подтверждения: {verification.code}",
+                from_email="noreply@example.com",  # Укажите ваш email-адрес
+                recipient_list=[email],
+                fail_silently=False,
+            )
 
-        user = authenticate(email=email, password=password)
+class ConfirmCodeSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=False)
+    phone = serializers.CharField(required=False)
+    code = serializers.CharField(max_length=6)
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+        phone = attrs.get('phone')
+        code = attrs.get('code')
+
+        if not email and not phone:
+            raise serializers.ValidationError("Необходимо указать email или телефон.")
+        
+        if not code:
+            raise serializers.ValidationError("Необходимо указать код.")
+
+        user = User.objects.filter(email=email).first()
         if not user:
-            raise AuthenticationFailed('Неверные данные для входа.')
-        if not user.is_active:
-            raise AuthenticationFailed('Пользователь не активен. Подтвердите email.')
+            raise serializers.ValidationError("Пользователь не найден.")
+        
+        verification = VerificationCode.objects.filter(user=user, code=code, is_used=False).first()
+        if not verification:
+            raise serializers.ValidationError("Неверный или просроченный код.")
 
+        attrs['user'] = user
+        attrs['verification'] = verification
+        return attrs
+
+    def save(self):
+        user = self.validated_data['user']
+        verification = self.validated_data['verification']
+        user.is_active = True
+        user.save()
+        verification.is_used = True
+        verification.save()
+
+        # Генерация JWT токенов
         refresh = RefreshToken.for_user(user)
-
         return {
-            'email': user.email,
-            'first_name': user.first_name,
-            'last_name': user.last_name,
             'refresh': str(refresh),
             'access': str(refresh.access_token),
         }
