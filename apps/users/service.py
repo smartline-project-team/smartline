@@ -7,7 +7,7 @@ class CustomManager(BaseUserManager):
         email = self.normalize_email(email)
         extra_fields.setdefault('is_staff', False)  
         user = self.model(email=email, **extra_fields)
-        user.is_active = True
+        user.is_active = False
         user.set_password(password)
         user.save()
         return user
